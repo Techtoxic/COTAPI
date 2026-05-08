@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+supabase
+python-dotenv
+requests
+pandas
+openpyxl
+xlrd
+slowapi
