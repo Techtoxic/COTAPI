@@ -79,7 +79,7 @@ COT_COLUMNS = {
     # Non-Commercial
     "NonComm_Positions_Long_All":      "noncomm_long",
     "NonComm_Positions_Short_All":     "noncomm_short",
-    "NonComm_Positions_Spread_All":    "noncomm_spreads",
+    "NonComm_Postions_Spread_All":     "noncomm_spreads",   # CFTC typo: "Postions" not "Positions"
     # Commercial
     "Comm_Positions_Long_All":         "comm_long",
     "Comm_Positions_Short_All":        "comm_short",
@@ -93,7 +93,7 @@ COT_COLUMNS = {
     "Change_in_Open_Interest_All":     "chg_open_interest",
     "Change_in_NonComm_Long_All":      "chg_noncomm_long",
     "Change_in_NonComm_Short_All":     "chg_noncomm_short",
-    "Change_in_NonComm_Spead_All":     "chg_noncomm_spreads",
+    "Change_in_NonComm_Spead_All":     "chg_noncomm_spreads",  # CFTC typo: "Spead" not "Spread"
     "Change_in_Comm_Long_All":         "chg_comm_long",
     "Change_in_Comm_Short_All":        "chg_comm_short",
     "Change_in_Tot_Rept_Long_All":     "chg_total_long",
