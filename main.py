@@ -455,6 +455,5 @@ def get_all_changes(request: Request, category: str, symbol: str):
             "total_short": row["chg_total_short"],
             "nonrept_long": row["chg_nonrept_long"],
             "nonrept_short": row["chg_nonrept_short"],
-            "nonrept_net": row["chg_nonrept_net"],
         },
     }
