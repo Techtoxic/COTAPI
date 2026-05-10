@@ -2,10 +2,9 @@ name: Weekly COT Ingest
 
 on:
   schedule:
-    # Every Friday at 4:00 PM EST (21:00 UTC) — 30 min after CFTC releases at 3:30 PM
-    - cron: "0 21 * * 5"
-
-  # Allow manual trigger from GitHub Actions tab
+    - cron: "0 14 * * 6"   # Saturday  9:00 AM EST
+    - cron: "0 14 * * 0"   # Sunday    9:00 AM EST
+    - cron: "0 14 * * 1"   # Monday    9:00 AM EST (final fallback)
   workflow_dispatch:
 
 jobs:
@@ -24,11 +23,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Wake Render server before ingest
+        run: curl -s https://cotapi.onrender.com/api/last-updated || true
+
       - name: Run ingest (current year only)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python ingest.py
+
+      - name: Wake Render server after ingest
+        run: curl -s https://cotapi.onrender.com/api/last-updated || true
 
       - name: Done
         run: echo "COT data ingested successfully for week ending $(date)"
