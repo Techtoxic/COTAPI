@@ -184,6 +184,76 @@ def get_all(request: Request):
     return results
 
 
+# ── History endpoints (MUST be before generic /{category}/{symbol} routes) ────
+@app.get("/api/history/{symbol}")
+@limiter.limit("30/minute")
+def get_symbol_history(request: Request, symbol: str, weeks: int = 12, from_date: str = None, to_date: str = None):
+    symbol = validate_symbol(symbol)
+    query = (
+        supabase.table("cot_positions")
+        .select("*")
+        .eq("symbol", symbol)
+        .order("as_of", desc=True)
+    )
+    if from_date:
+        query = query.gte("as_of", from_date)
+    if to_date:
+        query = query.lte("as_of", to_date)
+    if not from_date and not to_date:
+        query = query.limit(min(weeks, 260))
+
+    res = query.execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail=f"No history found for '{symbol}'")
+    return {
+        "symbol": symbol,
+        "weeks": len(res.data),
+        "data": [shape_full(r) for r in res.data],
+    }
+
+
+@app.get("/api/history/{symbol}/{group}/{field}")
+@limiter.limit("30/minute")
+def get_field_history(request: Request, symbol: str, group: str, field: str, weeks: int = 12, from_date: str = None, to_date: str = None):
+    symbol = validate_symbol(symbol)
+
+    col_map = {
+        "commercial":    {"long": "comm_long", "short": "comm_short", "net": "comm_net"},
+        "noncommercial": {"long": "noncomm_long", "short": "noncomm_short", "net": "noncomm_net", "spreads": "noncomm_spreads"},
+        "nonreportable": {"long": "nonrept_long", "short": "nonrept_short", "net": "nonrept_net"},
+    }
+
+    if group not in col_map or field not in col_map[group]:
+        raise HTTPException(status_code=400, detail=f"Invalid group '{group}' or field '{field}'.")
+
+    db_col = col_map[group][field]
+
+    query = (
+        supabase.table("cot_positions")
+        .select(f"as_of,{db_col}")
+        .eq("symbol", symbol)
+        .order("as_of", desc=True)
+    )
+    if from_date:
+        query = query.gte("as_of", from_date)
+    if to_date:
+        query = query.lte("as_of", to_date)
+    if not from_date and not to_date:
+        query = query.limit(min(weeks, 260))
+
+    res = query.execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail=f"No history found for '{symbol}'")
+
+    return {
+        "symbol": symbol,
+        "group": group,
+        "field": field,
+        "weeks": len(res.data),
+        "data": [{"as_of": r["as_of"], field: r[db_col]} for r in res.data],
+    }
+
+
 # ── Generic symbol endpoint (works for both metals and currencies) ─────────────
 @app.get("/api/{category}/{symbol}")
 @limiter.limit("60/minute")
@@ -385,96 +455,6 @@ def get_all_changes(request: Request, category: str, symbol: str):
             "total_short": row["chg_total_short"],
             "nonrept_long": row["chg_nonrept_long"],
             "nonrept_short": row["chg_nonrept_short"],
+            "nonrept_net": row["chg_nonrept_net"],
         },
-    }
-
-
-# ── History endpoints ─────────────────────────────────────────────────────────
-@app.get("/api/history/{symbol}")
-@limiter.limit("30/minute")
-def get_symbol_history(request: Request, symbol: str, weeks: int = 12):
-    symbol = validate_symbol(symbol)
-    rows = get_history(symbol, weeks)
-    return {
-        "symbol": symbol,
-        "weeks": len(rows),
-        "data": [shape_full(r) for r in rows],
-    }
-
-
-@app.get("/api/history/{symbol}/commercial/net")
-@limiter.limit("30/minute")
-def get_commercial_net_history(request: Request, symbol: str, weeks: int = 12):
-    symbol = validate_symbol(symbol)
-    rows = get_history(symbol, weeks)
-    return {
-        "symbol": symbol,
-        "field": "commercial_net",
-        "weeks": len(rows),
-        "data": [{"as_of": r["as_of"], "commercial_net": r["comm_net"]} for r in rows],
-    }
-
-
-@app.get("/api/history/{symbol}/noncommercial/net")
-@limiter.limit("30/minute")
-def get_noncommercial_net_history(request: Request, symbol: str, weeks: int = 12):
-    symbol = validate_symbol(symbol)
-    rows = get_history(symbol, weeks)
-    return {
-        "symbol": symbol,
-        "field": "noncommercial_net",
-        "weeks": len(rows),
-        "data": [{"as_of": r["as_of"], "noncommercial_net": r["noncomm_net"]} for r in rows],
-    }
-
-
-@app.get("/api/history/{symbol}/commercial/long")
-@limiter.limit("30/minute")
-def get_commercial_long_history(request: Request, symbol: str, weeks: int = 12):
-    symbol = validate_symbol(symbol)
-    rows = get_history(symbol, weeks)
-    return {
-        "symbol": symbol,
-        "field": "commercial_long",
-        "weeks": len(rows),
-        "data": [{"as_of": r["as_of"], "commercial_long": r["comm_long"]} for r in rows],
-    }
-
-
-@app.get("/api/history/{symbol}/commercial/short")
-@limiter.limit("30/minute")
-def get_commercial_short_history(request: Request, symbol: str, weeks: int = 12):
-    symbol = validate_symbol(symbol)
-    rows = get_history(symbol, weeks)
-    return {
-        "symbol": symbol,
-        "field": "commercial_short",
-        "weeks": len(rows),
-        "data": [{"as_of": r["as_of"], "commercial_short": r["comm_short"]} for r in rows],
-    }
-
-
-@app.get("/api/history/{symbol}/noncommercial/long")
-@limiter.limit("30/minute")
-def get_noncommercial_long_history(request: Request, symbol: str, weeks: int = 12):
-    symbol = validate_symbol(symbol)
-    rows = get_history(symbol, weeks)
-    return {
-        "symbol": symbol,
-        "field": "noncommercial_long",
-        "weeks": len(rows),
-        "data": [{"as_of": r["as_of"], "noncommercial_long": r["noncomm_long"]} for r in rows],
-    }
-
-
-@app.get("/api/history/{symbol}/noncommercial/short")
-@limiter.limit("30/minute")
-def get_noncommercial_short_history(request: Request, symbol: str, weeks: int = 12):
-    symbol = validate_symbol(symbol)
-    rows = get_history(symbol, weeks)
-    return {
-        "symbol": symbol,
-        "field": "noncommercial_short",
-        "weeks": len(rows),
-        "data": [{"as_of": r["as_of"], "noncommercial_short": r["noncomm_short"]} for r in rows],
     }
