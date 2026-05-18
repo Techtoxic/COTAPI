@@ -254,6 +254,117 @@ def get_field_history(request: Request, symbol: str, group: str, field: str, wee
     }
 
 
+# ── Bias Analysis ────────────────────────────────────────────────────────────
+# Pairs definition: (base_symbol, base_field), (quote_symbol, quote_field)
+# Currencies → noncommercial net (large speculators / banks)
+# Metals     → commercial net for the asset, noncommercial net for DXY
+
+BIAS_PAIRS = [
+    # Direct USD pairs
+    {"pair": "EURUSD",  "base": ("EUR",    "noncomm_net"), "quote": ("DXY", "noncomm_net"), "category": "currencies"},
+    {"pair": "GBPUSD",  "base": ("GBP",    "noncomm_net"), "quote": ("DXY", "noncomm_net"), "category": "currencies"},
+    {"pair": "AUDUSD",  "base": ("AUD",    "noncomm_net"), "quote": ("DXY", "noncomm_net"), "category": "currencies"},
+    {"pair": "NZDUSD",  "base": ("NZD",    "noncomm_net"), "quote": ("DXY", "noncomm_net"), "category": "currencies"},
+    {"pair": "USDCAD",  "base": ("DXY",    "noncomm_net"), "quote": ("CAD", "noncomm_net"), "category": "currencies"},
+    {"pair": "USDCHF",  "base": ("DXY",    "noncomm_net"), "quote": ("CHF", "noncomm_net"), "category": "currencies"},
+    {"pair": "USDJPY",  "base": ("DXY",    "noncomm_net"), "quote": ("JPY", "noncomm_net"), "category": "currencies"},
+    # Crosses
+    {"pair": "EURJPY",  "base": ("EUR",    "noncomm_net"), "quote": ("JPY", "noncomm_net"), "category": "currencies"},
+    {"pair": "GBPJPY",  "base": ("GBP",    "noncomm_net"), "quote": ("JPY", "noncomm_net"), "category": "currencies"},
+    {"pair": "AUDJPY",  "base": ("AUD",    "noncomm_net"), "quote": ("JPY", "noncomm_net"), "category": "currencies"},
+    {"pair": "NZDJPY",  "base": ("NZD",    "noncomm_net"), "quote": ("JPY", "noncomm_net"), "category": "currencies"},
+    {"pair": "EURGBP",  "base": ("EUR",    "noncomm_net"), "quote": ("GBP", "noncomm_net"), "category": "currencies"},
+    {"pair": "EURCAD",  "base": ("EUR",    "noncomm_net"), "quote": ("CAD", "noncomm_net"), "category": "currencies"},
+    {"pair": "GBPCAD",  "base": ("GBP",    "noncomm_net"), "quote": ("CAD", "noncomm_net"), "category": "currencies"},
+    {"pair": "AUDCAD",  "base": ("AUD",    "noncomm_net"), "quote": ("CAD", "noncomm_net"), "category": "currencies"},
+    {"pair": "AUDNZD",  "base": ("AUD",    "noncomm_net"), "quote": ("NZD", "noncomm_net"), "category": "currencies"},
+    {"pair": "EURAUD",  "base": ("EUR",    "noncomm_net"), "quote": ("AUD", "noncomm_net"), "category": "currencies"},
+    {"pair": "GBPAUD",  "base": ("GBP",    "noncomm_net"), "quote": ("AUD", "noncomm_net"), "category": "currencies"},
+    {"pair": "EURCHF",  "base": ("EUR",    "noncomm_net"), "quote": ("CHF", "noncomm_net"), "category": "currencies"},
+    {"pair": "GBPCHF",  "base": ("GBP",    "noncomm_net"), "quote": ("CHF", "noncomm_net"), "category": "currencies"},
+    # Metals — commercial net for asset, noncommercial net for DXY
+    {"pair": "XAUUSD",  "base": ("GOLD",   "comm_net"),    "quote": ("DXY", "noncomm_net"), "category": "metals"},
+    {"pair": "XAGUSD",  "base": ("SILVER", "comm_net"),    "quote": ("DXY", "noncomm_net"), "category": "metals"},
+]
+
+
+def compute_bias(base_net: int, quote_net: int) -> str:
+    """BUY = base bullish + quote bearish. SELL = base bearish + quote bullish. UNCERTAIN = same direction."""
+    if base_net > 0 and quote_net < 0:
+        return "BUY"
+    elif base_net < 0 and quote_net > 0:
+        return "SELL"
+    else:
+        return "UNCERTAIN"
+
+
+@app.get("/api/bias")
+@limiter.limit("30/minute")
+def get_bias(request: Request):
+    # Collect all unique symbols we need
+    needed = set()
+    for p in BIAS_PAIRS:
+        needed.add(p["base"][0])
+        needed.add(p["quote"][0])
+
+    # Fetch latest row for each symbol
+    symbol_data = {}
+    as_of_dates = []
+    for symbol in needed:
+        try:
+            row = get_latest(symbol)
+            symbol_data[symbol] = row
+            as_of_dates.append(row["as_of"])
+        except HTTPException:
+            symbol_data[symbol] = None
+
+    as_of = max(as_of_dates) if as_of_dates else None
+
+    currencies = []
+    metals = []
+
+    for p in BIAS_PAIRS:
+        base_sym, base_field = p["base"]
+        quote_sym, quote_field = p["quote"]
+
+        base_row = symbol_data.get(base_sym)
+        quote_row = symbol_data.get(quote_sym)
+
+        if not base_row or not quote_row:
+            continue
+
+        base_net = base_row.get(base_field) or 0
+        quote_net = quote_row.get(quote_field) or 0
+        bias = compute_bias(base_net, quote_net)
+
+        entry = {
+            "pair": p["pair"],
+            "bias": bias,
+            "base": {
+                "symbol": base_sym,
+                "positioning": "commercial" if base_field == "comm_net" else "noncommercial",
+                "net": base_net,
+            },
+            "quote": {
+                "symbol": quote_sym,
+                "positioning": "commercial" if quote_field == "comm_net" else "noncommercial",
+                "net": quote_net,
+            },
+        }
+
+        if p["category"] == "metals":
+            metals.append(entry)
+        else:
+            currencies.append(entry)
+
+    return {
+        "as_of": as_of,
+        "note": "BUY = base bullish + quote bearish. SELL = base bearish + quote bullish. UNCERTAIN = both same direction, no signal.",
+        "currencies": currencies,
+        "metals": metals,
+    }
+
+
 # ── Generic symbol endpoint (works for both metals and currencies) ─────────────
 @app.get("/api/{category}/{symbol}")
 @limiter.limit("60/minute")
