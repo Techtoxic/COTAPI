@@ -84,16 +84,44 @@ SYMBOL_MAP = {
         "category": "currencies",
         "description": "CONTRACTS OF ZAR 500,000",
     },
+
+    # Crypto — CME futures (non-commercial net = speculator sentiment)
+    "BTC": {
+        "code": "133741",
+        "name": "BITCOIN - CHICAGO MERCANTILE EXCHANGE",
+        "category": "crypto",
+        "description": "CONTRACTS OF 5 BITCOIN",
+    },
+    "ETH": {
+        "code": "146021",
+        "name": "ETHER CASH SETTLED - CHICAGO MERCANTILE EXCHANGE",
+        "category": "crypto",
+        "description": "CONTRACTS OF 50 ETHER",
+    },
+
+    # Indices — CME E-mini futures (non-commercial net = speculator sentiment)
+    "NQ": {
+        "code": "209742",
+        "name": "NASDAQ-100 MINI - CHICAGO MERCANTILE EXCHANGE",
+        "category": "indices",
+        "description": "CONTRACTS OF $20 X INDEX",
+    },
+    "ES": {
+        "code": "13874A",
+        "name": "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE",
+        "category": "indices",
+        "description": "CONTRACTS OF $50 X INDEX",
+    },
 }
 
 # Reverse lookup: CFTC code → symbol
 CODE_TO_SYMBOL = {v["code"]: k for k, v in SYMBOL_MAP.items()}
 
-# All metals symbols
-METALS = [k for k, v in SYMBOL_MAP.items() if v["category"] == "metals"]
-
-# All currency symbols
+# Category lists
+METALS    = [k for k, v in SYMBOL_MAP.items() if v["category"] == "metals"]
 CURRENCIES = [k for k, v in SYMBOL_MAP.items() if v["category"] == "currencies"]
+CRYPTO    = [k for k, v in SYMBOL_MAP.items() if v["category"] == "crypto"]
+INDICES   = [k for k, v in SYMBOL_MAP.items() if v["category"] == "indices"]
 
 
 def get_symbol_info(symbol: str) -> dict | None:
