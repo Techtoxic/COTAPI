@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from symbols import SYMBOL_MAP, METALS, CURRENCIES
+from symbols import SYMBOL_MAP, METALS, CURRENCIES, CRYPTO, INDICES
 
 load_dotenv()
 
@@ -147,10 +147,13 @@ def root():
 @app.get("/api/symbols")
 @limiter.limit("60/minute")
 def list_symbols(request: Request):
-    return {
-        "metals": {k: v for k, v in SYMBOL_MAP.items() if v["category"] == "metals"},
-        "currencies": {k: v for k, v in SYMBOL_MAP.items() if v["category"] == "currencies"},
-    }
+    result = {}
+    for k, v in SYMBOL_MAP.items():
+        cat = v["category"]
+        if cat not in result:
+            result[cat] = {}
+        result[cat][k] = v
+    return result
 
 
 @app.get("/api/last-updated")
@@ -282,6 +285,12 @@ BIAS_PAIRS = [
     {"pair": "GBPAUD",  "base": ("GBP",    "noncomm_net"), "quote": ("AUD", "noncomm_net"), "category": "currencies"},
     {"pair": "EURCHF",  "base": ("EUR",    "noncomm_net"), "quote": ("CHF", "noncomm_net"), "category": "currencies"},
     {"pair": "GBPCHF",  "base": ("GBP",    "noncomm_net"), "quote": ("CHF", "noncomm_net"), "category": "currencies"},
+    # Crypto vs USD — non-commercial net (large speculators / asset managers)
+    {"pair": "BTCUSD", "base": ("BTC", "noncomm_net"), "quote": ("DXY", "noncomm_net"), "category": "crypto"},
+    {"pair": "ETHUSD", "base": ("ETH", "noncomm_net"), "quote": ("DXY", "noncomm_net"), "category": "crypto"},
+    # Indices vs USD — non-commercial speculator sentiment
+    {"pair": "NAS100", "base": ("NQ",  "noncomm_net"), "quote": ("DXY", "noncomm_net"), "category": "indices"},
+    {"pair": "SPX500", "base": ("ES",  "noncomm_net"), "quote": ("DXY", "noncomm_net"), "category": "indices"},
     # Metals — commercial net for asset, noncommercial net for DXY
     {"pair": "XAUUSD",  "base": ("GOLD",   "comm_net"),    "quote": ("DXY", "noncomm_net"), "category": "metals"},
     {"pair": "XAGUSD",  "base": ("SILVER", "comm_net"),    "quote": ("DXY", "noncomm_net"), "category": "metals"},
@@ -322,6 +331,8 @@ def get_bias(request: Request):
 
     currencies = []
     metals = []
+    crypto = []
+    indices = []
 
     for p in BIAS_PAIRS:
         base_sym, base_field = p["base"]
@@ -354,6 +365,10 @@ def get_bias(request: Request):
 
         if p["category"] == "metals":
             metals.append(entry)
+        elif p["category"] == "crypto":
+            crypto.append(entry)
+        elif p["category"] == "indices":
+            indices.append(entry)
         else:
             currencies.append(entry)
 
@@ -362,6 +377,8 @@ def get_bias(request: Request):
         "note": "BUY = base bullish + quote bearish. SELL = base bearish + quote bullish. UNCERTAIN = both same direction, no signal.",
         "currencies": currencies,
         "metals": metals,
+        "crypto": crypto,
+        "indices": indices,
     }
 
 
